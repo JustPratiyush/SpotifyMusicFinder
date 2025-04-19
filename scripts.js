@@ -756,7 +756,7 @@ function authenticateWithSpotify() {
   ].join(" ");
 
   // Correct Spotify Authorize URL
-  const authUrl = `https://api.spotify.com/v1/recommendations?limit=5&seed_tracks=$8{SPOTIFY_CLIENT_ID}&redirect_uri=${encodeURIComponent(
+  const authUrl = `https://api.spotify.com/v1/recommendations?limit=5&seed_tracks=7d96f4a1753c4d679344bdd7e90bdd89&redirect_uri=${encodeURIComponent(
     SPOTIFY_REDIRECT_URI
   )}&scope=${encodeURIComponent(scopes)}&response_type=token&show_dialog=true`;
 
