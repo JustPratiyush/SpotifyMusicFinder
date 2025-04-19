@@ -1,0 +1,321 @@
+/* General body styling */
+body {
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  background-color: #f0f2f5;
+}
+
+/* Login container styling */
+.login-container {
+  display: flex; /* Use flexbox for centering */
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 300px;
+  background-color: white;
+  border-radius: 10px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  padding: 30px 20px;
+}
+
+/* Login card styling */
+.login-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.login-card h2 {
+  margin-top: 0;
+  margin-bottom: 20px;
+  color: #333;
+}
+
+.login-card .profile-pic {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  margin-bottom: 15px;
+  object-fit: cover; /* Ensure image covers the area */
+}
+
+.login-card input {
+  padding: 12px;
+  margin-bottom: 15px; /* Increased margin */
+  font-size: 1em;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  width: 100%;
+  box-sizing: border-box; /* Include padding in width */
+}
+
+.login-card button {
+  padding: 12px 20px;
+  border: none;
+  background-color: #1db954; /* Spotify green */
+  color: white;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 1em;
+  width: 100%;
+  margin-top: 10px;
+  transition: background-color 0.3s ease; /* Smooth hover effect */
+}
+
+.login-card button:hover {
+  background-color: #1aa34a; /* Darker Spotify green */
+}
+
+/* Chat application container styling */
+.chat-app {
+  display: none; /* Initially hidden, shown after login */
+  flex-direction: column;
+  width: 370px; /* Slightly wider */
+  height: 650px; /* Slightly taller */
+  background-color: white;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); /* Slightly stronger shadow */
+  overflow: hidden; /* Prevent content overflow */
+}
+
+/* Header styling */
+.header {
+  background-color: #1db954; /* Spotify green */
+  color: white;
+  padding: 15px;
+  text-align: center;
+  font-size: 1.4em; /* Adjusted font size */
+  font-weight: 600;
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+}
+
+/* Chat message container styling */
+.chat-container {
+  flex: 1; /* Take remaining vertical space */
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto; /* Enable vertical scrolling */
+  padding: 15px;
+  background-color: #f9f9f9; /* Light background for chat area */
+}
+
+/* Individual message styling */
+.message {
+  display: flex;
+  align-items: flex-end; /* Align avatar with bottom of text */
+  margin: 8px 0;
+  padding: 10px 15px;
+  border-radius: 18px; /* More rounded corners */
+  max-width: 80%; /* Limit message width */
+  word-wrap: break-word;
+  position: relative;
+  animation: fadeIn 0.4s ease-out; /* Fade-in animation */
+}
+
+.message .avatar {
+  width: 35px; /* Slightly smaller avatar */
+  height: 35px;
+  border-radius: 50%;
+  margin-right: 10px;
+  flex-shrink: 0; /* Prevent avatar from shrinking */
+}
+
+.message-content {
+  display: flex;
+  flex-direction: column;
+}
+
+/* User message styling */
+.message.user {
+  background-color: #1db954; /* Spotify green */
+  color: white;
+  align-self: flex-end; /* Align user messages to the right */
+  flex-direction: row-reverse; /* Reverse order for user (text then avatar) */
+}
+
+.message.user .avatar {
+  margin-left: 10px;
+  margin-right: 0;
+}
+
+/* Other (bot) message styling */
+.message.other {
+  background-color: #e4e6eb; /* Lighter grey */
+  color: black;
+  align-self: flex-start; /* Align bot messages to the left */
+}
+
+/* Timestamp styling */
+.timestamp {
+  font-size: 0.75em; /* Smaller timestamp */
+  color: #999; /* Grey color for timestamp */
+  margin-top: 5px;
+  text-align: right; /* Align timestamp to the right within the bubble */
+}
+
+.message.user .timestamp {
+  color: rgba(255, 255, 255, 0.8); /* Lighter timestamp for user */
+  text-align: right;
+}
+.message.other .timestamp {
+  text-align: left; /* Align timestamp to the left for bot */
+}
+
+/* Input area styling */
+.input-container {
+  display: flex;
+  padding: 10px 15px;
+  border-top: 1px solid #ddd; /* Lighter border */
+  background-color: #ffffff;
+  align-items: center;
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
+}
+
+.input-container input {
+  flex: 1; /* Take available space */
+  padding: 12px 15px; /* More padding */
+  border: 1px solid #ccc;
+  border-radius: 25px; /* Pill shape */
+  font-size: 1em;
+  margin-right: 10px;
+  outline: none; /* Remove default focus outline */
+}
+
+.input-container button {
+  padding: 10px 18px; /* Adjusted padding */
+  border: none;
+  background-color: #1db954; /* Spotify green */
+  color: white;
+  border-radius: 25px; /* Pill shape */
+  cursor: pointer;
+  font-size: 1em;
+  font-weight: 500;
+  transition: background-color 0.3s ease; /* Smooth hover effect */
+}
+
+.input-container button:hover {
+  background-color: #1aa34a; /* Darker Spotify green */
+}
+
+/* Typing and API indicator styling */
+.typing-indicator,
+.api-processing-indicator {
+  display: none; /* Hidden by default */
+  font-style: italic;
+  color: #aaa; /* Lighter grey */
+  padding: 5px 15px; /* Reduced padding */
+  align-self: flex-start;
+  margin: 5px 0;
+  font-size: 0.9em;
+  animation: pulse 1.5s infinite;
+}
+
+.typing-indicator.active,
+.api-processing-indicator.active {
+  display: block; /* Show when active */
+}
+
+/* Styling for song search results */
+.song-results {
+  margin-top: 10px;
+  border-top: 1px solid #eee;
+  padding-top: 10px;
+}
+
+.song-item {
+  display: flex;
+  align-items: center;
+  background-color: #fff;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 8px;
+  margin-bottom: 8px;
+  transition: background-color 0.2s ease;
+}
+
+.song-item:hover {
+  background-color: #f5f5f5;
+}
+
+.song-thumbnail {
+  width: 50px;
+  height: 50px;
+  border-radius: 4px;
+  margin-right: 10px;
+  object-fit: cover;
+}
+
+.song-details {
+  flex-grow: 1;
+  margin-right: 10px;
+}
+
+.song-title {
+  font-weight: 600;
+  font-size: 0.95em;
+  color: #333;
+}
+
+.song-artist {
+  font-size: 0.85em;
+  color: #666;
+}
+
+.play-button {
+  background-color: #1db954;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  font-size: 1em;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: background-color 0.2s ease;
+  flex-shrink: 0; /* Prevent button from shrinking */
+}
+
+.play-button:hover {
+  background-color: #1aa34a;
+}
+
+/* Styling for the embedded Spotify player container */
+.spotify-player {
+  margin-top: 10px;
+  border-radius: 8px; /* Match Spotify embed style */
+  overflow: hidden; /* Clip corners */
+}
+
+/* Keyframe animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.6;
+  }
+}

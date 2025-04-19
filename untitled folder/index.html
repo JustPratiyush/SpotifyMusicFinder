@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Messenger Clone</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="login-container" id="login-container">
+      <div class="login-card">
+        <img src="EmptyProfilePic.webp" alt="Profile" class="profile-pic" />
+        <h2>Login</h2>
+        <input
+          type="text"
+          id="username-input"
+          placeholder="Enter your username"
+          onkeydown="handleLoginKey(event)"
+        />
+        <button onclick="login()">Login</button>
+      </div>
+    </div>
+    <div class="chat-app" id="chat-app" style="display: none">
+      <div class="header">Messenger Clone</div>
+      <div class="chat-container" id="chat-container">
+        <!-- Messages will be appended here -->
+        <div class="typing-indicator" id="typing-indicator">
+          User is typing...
+        </div>
+        <div class="api-processing-indicator" id="api-processing-indicator">
+          Processing...
+        </div>
+      </div>
+      <div class="input-container">
+        <input
+          type="text"
+          id="message-input"
+          placeholder="Type a message..."
+          onkeydown="handleTyping(event)"
+        />
+        <button onclick="sendMessage()">Send</button>
+      </div>
+    </div>
+    <script src="scripts.js"></script>
+  </body>
+</html>
