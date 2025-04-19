@@ -14,21 +14,22 @@ let typingTimeout;
 let currentUser;
 let spotifyAccessToken = null;
 let userLikedSongs = []; // Stores IDs of tracks the user interacts with positively
+let pendingSpotifyRequest = null; // Store the function to call after auth
 
 // --- Configuration ---
 
 // Gemini API Key (Replace with your actual key)
 // WARNING: Exposing API keys client-side is a security risk in production.
-// For local development or internal tools, this might be acceptable,
-// but for public applications, use a backend proxy.
-const GEMINI_API_KEY = "AIzaSyCVFniEjNZt74EGIrUfehhmtplfuiOYLGk"; // <--- REPLACE THIS
-const GEMINI_MODEL = "gemini-2.0-flash"; // Or your preferred model
+const GEMINI_API_KEY = "AIzaSyCVFniEjNZt74EGIrUfehhmtplfuiOYLGk"; // <--- REPLACE THIS IF NEEDED
+const GEMINI_MODEL = "gemini-pro"; // Or your preferred model
 
 // Spotify API Credentials (Replace with your actual Client ID)
-const SPOTIFY_CLIENT_ID = "7d96f4a1753c4d679344bdd7e90bdd89"; // <--- REPLACE THIS
-// IMPORTANT: This Redirect URI MUST EXACTLY match the one registered
-// in your Spotify Developer Dashboard for this application.
-const SPOTIFY_REDIRECT_URI = "https://spotify-music-finder-two.vercel.app/"; // Use your Vercel URL
+const SPOTIFY_CLIENT_ID = "7d96f4a1753c4d679344bdd7e90bdd89"; // <--- REPLACE THIS IF NEEDED
+
+// ***** IMPORTANT: Update Redirect URI to point to your callback.html *****
+const SPOTIFY_REDIRECT_URI =
+  "https://spotify-music-finder-two.vercel.app/callback.html"; // Use your Vercel URL + /callback.html
+
 // Fallback responses if Gemini API fails
 const prebuiltReplies = [
   "Sorry, I couldn't connect right now. Maybe ask for a specific song?",
@@ -115,7 +116,12 @@ function login() {
       timestamp: formatTimestamp(new Date()),
       avatar: "chatbot_profile.png", // Replace with your bot avatar path
     };
-    receiveMessage(introMessage); // Display the intro message
+    // Check if intro message already exists to avoid duplicates on reload
+    const messages =
+      JSON.parse(localStorage.getItem(`chatMessages_${currentUser}`)) || [];
+    if (!messages.some((msg) => msg.text === botIntroduction)) {
+      receiveMessage(introMessage); // Display the intro message only if not present
+    }
   }, 500); // Short delay after login
 }
 
@@ -183,6 +189,10 @@ function createMessageElement(message) {
       : "chatbot_profile.png");
   avatarElement.classList.add("avatar");
   avatarElement.alt = "Avatar";
+  // Add error handling for avatar images
+  avatarElement.onerror = function () {
+    this.src = "https://placehold.co/35x35/cccccc/ffffff?text=?";
+  };
 
   const messageContentDiv = document.createElement("div");
   messageContentDiv.classList.add("message-content");
@@ -190,7 +200,8 @@ function createMessageElement(message) {
   const textDiv = document.createElement("div");
   if (message.isHTML) {
     // Use innerHTML only if the flag is explicitly set
-    // Be cautious with HTML injection
+    // Sanitize HTML if it comes from untrusted sources (like Gemini)
+    // For Spotify results/player, it's generally safe as we construct it
     textDiv.innerHTML = message.text;
   } else {
     // Use textContent for plain text to prevent XSS
@@ -219,7 +230,20 @@ function createMessageElement(message) {
 // Append message element to chat and scroll down
 function appendMessageToChat(message) {
   const messageElement = createMessageElement(message);
-  chatContainer.appendChild(messageElement);
+  // Find indicators and insert message before them
+  const typingIndicatorElement = document.getElementById("typing-indicator");
+  const apiIndicatorElement = document.getElementById(
+    "api-processing-indicator"
+  );
+
+  if (apiIndicatorElement) {
+    chatContainer.insertBefore(messageElement, apiIndicatorElement);
+  } else if (typingIndicatorElement) {
+    chatContainer.insertBefore(messageElement, typingIndicatorElement);
+  } else {
+    chatContainer.appendChild(messageElement); // Fallback if indicators aren't found
+  }
+
   // Scroll to the bottom smoothly
   chatContainer.scrollTo({
     top: chatContainer.scrollHeight,
@@ -234,39 +258,47 @@ function processUserMessage(userMessage) {
   showApiProcessingIndicator(); // Show indicator while processing
 
   const lowerCaseMessage = userMessage.toLowerCase();
+  let requiresSpotify = false;
+  let spotifyAction = null;
 
-  // Check for Spotify authentication requirement first
-  if (
-    !spotifyAccessToken &&
-    (lowerCaseMessage.includes("play") ||
-      lowerCaseMessage.includes("recommend") ||
-      lowerCaseMessage.includes("search"))
-  ) {
-    authenticateWithSpotify();
-    hideApiProcessingIndicator(); // Hide indicator as auth prompt is shown
-    return;
-  }
-
-  // Prioritize specific commands
+  // Determine if Spotify action is needed and which one
   if (lowerCaseMessage.startsWith("play ")) {
-    const query = userMessage.substring(5).trim();
-    searchAndDisplaySongs(query);
+    requiresSpotify = true;
+    spotifyAction = () =>
+      searchAndDisplaySongs(userMessage.substring(5).trim());
   } else if (lowerCaseMessage.startsWith("recommend ")) {
-    const query = userMessage.substring(10).trim();
-    getRecommendationsBasedOnQuery(query);
+    requiresSpotify = true;
+    spotifyAction = () =>
+      getRecommendationsBasedOnQuery(userMessage.substring(10).trim());
   } else if (lowerCaseMessage.startsWith("search for ")) {
-    const query = userMessage.substring(11).trim();
-    searchAndDisplaySongs(query);
+    requiresSpotify = true;
+    spotifyAction = () =>
+      searchAndDisplaySongs(userMessage.substring(11).trim());
   } else if (
     lowerCaseMessage.includes("like") ||
     lowerCaseMessage.includes("favorite") ||
     lowerCaseMessage.includes("love the song")
   ) {
-    // Handle preference indication (simple acknowledgement for now)
+    // Preference doesn't strictly require Spotify immediately, just acknowledge
     handleUserPreference(userMessage);
+    return; // Exit after handling preference
   } else {
-    // Default to Gemini for general conversation or less specific requests
+    // Default to Gemini for general conversation
     getGeminiResponse(userMessage);
+    return; // Exit after calling Gemini
+  }
+
+  // --- Handle Spotify Actions ---
+  if (requiresSpotify) {
+    if (!spotifyAccessToken) {
+      // No token, initiate auth and store the action to perform later
+      pendingSpotifyRequest = spotifyAction; // Store the function itself
+      authenticateWithSpotify();
+      // Don't hide indicator here, wait for auth result
+    } else {
+      // Token exists, perform the action immediately
+      spotifyAction();
+    }
   }
 }
 
@@ -276,14 +308,22 @@ function searchAndDisplaySongs(query) {
     receiveMessage({
       text: "What song or artist would you like me to search for?",
     });
+    hideApiProcessingIndicator(); // Hide indicator as no action taken
     return;
   }
+  if (!spotifyAccessToken) {
+    console.error("searchAndDisplaySongs called without Spotify token.");
+    receiveMessage({ text: "Please connect to Spotify first." });
+    authenticateWithSpotify(); // Re-trigger auth if called incorrectly
+    hideApiProcessingIndicator();
+    return;
+  }
+
   console.log(`Searching Spotify for: ${query}`);
+  showApiProcessingIndicator(); // Ensure indicator is shown for this action
 
   // Correct Spotify Search API endpoint
-  const apiUrl = `https://api.spotify.com/v1/search${encodeURIComponent(
-    query
-  )}&type=track&limit=5`;
+  const apiUrl = `https://api.spotify.com/v1/recommendations?limit=5&seed_tracks=$7{encodeURIComponent(query)}&type=track&limit=5`;
 
   fetch(apiUrl, {
     headers: {
@@ -292,13 +332,18 @@ function searchAndDisplaySongs(query) {
   })
     .then((response) => {
       if (response.status === 401) {
-        // Access token expired or invalid
-        console.error("Spotify token expired or invalid. Re-authenticating...");
+        console.error(
+          "Spotify token expired or invalid during search. Re-authenticating..."
+        );
+        spotifyAccessToken = null; // Clear invalid token
+        pendingSpotifyRequest = () => searchAndDisplaySongs(query); // Set this search as pending
         authenticateWithSpotify(); // Trigger re-authentication
         throw new Error("Spotify authentication required"); // Stop processing this request
       }
       if (!response.ok) {
-        throw new Error(`Spotify API error: ${response.statusText}`);
+        throw new Error(
+          `Spotify API error: ${response.statusText} (${response.status})`
+        );
       }
       return response.json();
     })
@@ -321,8 +366,10 @@ function searchAndDisplaySongs(query) {
       }
     })
     .finally(() => {
-      // Ensure indicator is hidden even if auth was triggered
-      hideApiProcessingIndicator();
+      // Hide indicator unless authentication is pending
+      if (!pendingSpotifyRequest) {
+        hideApiProcessingIndicator();
+      }
     });
 }
 
@@ -339,15 +386,19 @@ function displaySongResults(tracks) {
     const albumImage =
       track.album.images.length > 0
         ? track.album.images[track.album.images.length - 1].url // Get smallest image
-        : "https://placehold.co/60x60/grey/white?text=Album"; // Placeholder image
+        : "https://placehold.co/60x60/eeeeee/777777?text=Album"; // Placeholder image
 
     // Escape quotes in names for the onclick attribute
-    const escapedTrackName = trackName.replace(/"/g, "&quot;");
-    const escapedArtists = artists.replace(/"/g, "&quot;");
+    const escapedTrackName = trackName
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+    const escapedArtists = artists
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
 
     songListHTML += `
       <div class='song-item'>
-        <img src='${albumImage}' alt='Album art for ${escapedTrackName}' class='song-thumbnail'>
+        <img src='${albumImage}' alt='Album art for ${escapedTrackName}' class='song-thumbnail' onerror="this.src='https://placehold.co/60x60/eeeeee/777777?text=Err'">
         <div class='song-details'>
           <div class='song-title'>${trackName}</div>
           <div class='song-artist'>${artists}</div>
@@ -374,7 +425,7 @@ function playSong(trackId, trackName, artists) {
 
   const playerHTML = `
     <div class='spotify-player'>
-      <iframe style="border-radius:12px" src="${embedUrl}"
+      <iframe title="Spotify Embed Player for ${trackName}" style="border-radius:12px" src="${embedUrl}"
         width="100%" height="80" frameBorder="0" allowfullscreen=""
         allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
         loading="lazy"></iframe>
@@ -393,12 +444,25 @@ function playSong(trackId, trackName, artists) {
       userLikedSongs.shift(); // Keep only the last 10 played/liked songs
     }
     console.log("Updated liked songs:", userLikedSongs);
+    // Maybe save liked songs to localStorage too?
+    // localStorage.setItem(`spotifyLikedSongs_${currentUser}`, JSON.stringify(userLikedSongs));
   }
 }
 
 // Get recommendations based on a query (could be genre, artist, or based on liked songs)
 function getRecommendationsBasedOnQuery(query) {
+  if (!spotifyAccessToken) {
+    console.error(
+      "getRecommendationsBasedOnQuery called without Spotify token."
+    );
+    receiveMessage({ text: "Please connect to Spotify first." });
+    pendingSpotifyRequest = () => getRecommendationsBasedOnQuery(query); // Set this action as pending
+    authenticateWithSpotify(); // Re-trigger auth
+    hideApiProcessingIndicator();
+    return;
+  }
   console.log(`Getting recommendations based on: ${query}`);
+  showApiProcessingIndicator(); // Ensure indicator is shown
 
   // Simple logic: If user has liked songs, use those. Otherwise, try query as genre/artist.
   if (userLikedSongs.length > 0) {
@@ -410,10 +474,8 @@ function getRecommendationsBasedOnQuery(query) {
   } else if (query) {
     // Try interpreting the query as a genre first
     console.log(`Trying query "${query}" as genre/artist seed.`);
-    // Note: Spotify recommendation API works best with multiple seeds (up to 5 total)
-    // This is a simplified approach using only the query.
-    // A more robust solution would involve searching for the query to get artist/track IDs first.
-    getSpotifyRecommendations([], [query], []); // Seed by genre (assuming query is a genre)
+    // A more robust solution would search Spotify first to get actual genre/artist IDs.
+    getSpotifyRecommendations([], [query.toLowerCase()], []); // Seed by genre (assuming query is a genre)
   } else {
     receiveMessage({
       text: "What kind of music would you like recommendations for? (e.g., 'recommend rock music', 'recommend songs like The Beatles')",
@@ -428,6 +490,14 @@ function getSpotifyRecommendations(
   seedGenres = [],
   seedArtists = []
 ) {
+  if (!spotifyAccessToken) {
+    console.error("getSpotifyRecommendations called without Spotify token.");
+    receiveMessage({ text: "Please connect to Spotify first." });
+    // Don't set pending request here as it might overwrite the original trigger
+    authenticateWithSpotify();
+    hideApiProcessingIndicator();
+    return;
+  }
   if (
     seedTracks.length === 0 &&
     seedGenres.length === 0 &&
@@ -440,17 +510,42 @@ function getSpotifyRecommendations(
     return;
   }
 
+  showApiProcessingIndicator(); // Ensure indicator is shown
+
   // Construct the API URL for recommendations
   let apiUrl = `https://api.spotify.com/v1/recommendations?limit=5&seed_tracks=$2`;
   const params = [];
+  // Filter out empty seeds before joining
   if (seedTracks.length > 0)
-    params.push(`seed_tracks=${seedTracks.slice(0, 5).join(",")}`); // Max 5 seeds
+    params.push(
+      `seed_tracks=${seedTracks
+        .slice(0, 5)
+        .filter((t) => t)
+        .join(",")}`
+    );
   if (seedGenres.length > 0)
-    params.push(`seed_genres=${seedGenres.slice(0, 5).join(",")}`);
+    params.push(
+      `seed_genres=${seedGenres
+        .slice(0, 5)
+        .filter((g) => g)
+        .join(",")}`
+    );
   if (seedArtists.length > 0)
-    params.push(`seed_artists=${seedArtists.slice(0, 5).join(",")}`);
+    params.push(
+      `seed_artists=${seedArtists
+        .slice(0, 5)
+        .filter((a) => a)
+        .join(",")}`
+    );
 
-  apiUrl += params.join("&");
+  // Ensure at least one seed type is present after filtering
+  if (params.length === 0) {
+    receiveMessage({ text: "Invalid seeds provided for recommendations." });
+    hideApiProcessingIndicator();
+    return;
+  }
+
+  apiUrl += params.join("&") + "&limit=5"; // Add limit
   console.log("Recommendation API URL:", apiUrl);
 
   fetch(apiUrl, {
@@ -458,11 +553,34 @@ function getSpotifyRecommendations(
   })
     .then((response) => {
       if (response.status === 401) {
+        console.error(
+          "Spotify token expired or invalid during recommendations. Re-authenticating..."
+        );
+        spotifyAccessToken = null; // Clear invalid token
+        // Store the recommendation request as pending. Need to capture the seeds.
+        pendingSpotifyRequest = () =>
+          getSpotifyRecommendations(seedTracks, seedGenres, seedArtists);
         authenticateWithSpotify();
         throw new Error("Spotify authentication required");
       }
       if (!response.ok) {
-        throw new Error(`Spotify API error: ${response.statusText}`);
+        // Try to get error message from Spotify response body
+        return response
+          .json()
+          .then((err) => {
+            console.error("Spotify Recommendation API Error Response:", err);
+            throw new Error(
+              `Spotify API error: ${
+                err.error?.message || response.statusText
+              } (${response.status})`
+            );
+          })
+          .catch(() => {
+            // Fallback if response body isn't JSON or doesn't have expected structure
+            throw new Error(
+              `Spotify API error: ${response.statusText} (${response.status})`
+            );
+          });
       }
       return response.json();
     })
@@ -480,36 +598,49 @@ function getSpotifyRecommendations(
       console.error("Error getting Spotify recommendations:", error);
       if (error.message !== "Spotify authentication required") {
         receiveMessage({
-          text: "Sorry, I had trouble getting recommendations right now.",
+          text: `Sorry, I had trouble getting recommendations: ${error.message}`,
         });
       }
     })
-    .finally(() => hideApiProcessingIndicator());
+    .finally(() => {
+      // Hide indicator unless authentication is pending
+      if (!pendingSpotifyRequest) {
+        hideApiProcessingIndicator();
+      }
+    });
 }
 
 // Handle messages indicating user preference
 function handleUserPreference(userMessage) {
-  // Simple acknowledgement for now. Could be expanded to extract song/artist.
+  // Simple acknowledgement. Could extract song/artist mentioned.
   receiveMessage({
     text: "Got it! I'll keep that in mind for future recommendations.",
   });
-  // No need to hide indicator here, as receiveMessage does it.
+  hideApiProcessingIndicator(); // Hide indicator as this is a final response
 }
 
 // Get response from Gemini API for general conversation
 function getGeminiResponse(userMessage) {
-  if (!GEMINI_API_KEY || GEMINI_API_KEY === "YOUR_GEMINI_API_KEY") {
-    console.warn("Gemini API Key not set. Falling back to prebuilt replies.");
+  if (
+    !GEMINI_API_KEY ||
+    GEMINI_API_KEY.includes("YOUR") ||
+    GEMINI_API_KEY.length < 10
+  ) {
+    // Basic check
+    console.warn(
+      "Gemini API Key not set or invalid. Falling back to prebuilt replies."
+    );
     const randomReply =
       prebuiltReplies[Math.floor(Math.random() * prebuiltReplies.length)];
     receiveMessage({ text: randomReply });
     return;
   }
 
+  showApiProcessingIndicator(); // Ensure indicator is shown
+
   const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
-  // Basic prompt to keep responses conversational and focused on music
-  const prompt = `You are a friendly music chatbot. The user said: "${userMessage}". Respond conversationally. If they ask for music, guide them to use commands like 'play [song/artist]', 'recommend [genre/artist]', or 'search for [song]'. Keep responses brief (1-2 sentences). Do not use markdown.`;
+  const prompt = `You are a friendly music chatbot. The user said: "${userMessage}". Respond conversationally. If they ask for music, guide them to use commands like 'play [song/artist]', 'recommend [genre/artist]', or 'search for [song]'. Keep responses brief (1-2 sentences). Do not use markdown formatting (like * or #).`;
 
   const requestBody = {
     contents: [{ parts: [{ text: prompt }] }],
@@ -517,8 +648,8 @@ function getGeminiResponse(userMessage) {
       temperature: 0.7,
       maxOutputTokens: 80,
     },
-    // Safety settings (optional, adjust as needed)
     safetySettings: [
+      // Adjust safety settings as needed
       {
         category: "HARM_CATEGORY_HARASSMENT",
         threshold: "BLOCK_MEDIUM_AND_ABOVE",
@@ -545,22 +676,27 @@ function getGeminiResponse(userMessage) {
   })
     .then((response) => {
       if (!response.ok) {
-        // Log detailed error if possible
         return response
           .json()
           .then((err) => {
             console.error("Gemini API Error Response:", err);
-            throw new Error(`Gemini API error: ${response.statusText}`);
+            throw new Error(
+              `Gemini API error: ${
+                err.error?.message || response.statusText
+              } (${response.status})`
+            );
           })
           .catch(() => {
-            throw new Error(`Gemini API error: ${response.statusText}`); // Fallback if error body isn't JSON
+            throw new Error(
+              `Gemini API error: ${response.statusText} (${response.status})`
+            );
           });
       }
       return response.json();
     })
     .then((data) => {
-      // Extract text, handling potential variations in response structure
-      let generatedText = "Sorry, I couldn't process that."; // Default fallback
+      let generatedText = "Sorry, I couldn't process that.";
+      // Check response structure carefully based on Gemini API docs
       if (
         data.candidates &&
         data.candidates.length > 0 &&
@@ -569,24 +705,28 @@ function getGeminiResponse(userMessage) {
         data.candidates[0].content.parts.length > 0
       ) {
         generatedText = data.candidates[0].content.parts[0].text;
+      } else if (data.promptFeedback && data.promptFeedback.blockReason) {
+        console.warn(
+          "Gemini request blocked:",
+          data.promptFeedback.blockReason
+        );
+        generatedText =
+          "I can't respond to that request due to safety guidelines.";
       } else {
         console.warn("Unexpected Gemini API response structure:", data);
       }
 
-      // Basic cleanup (remove potential markdown, trim)
-      const cleanedText = generatedText.replace(/[*#]/g, "").trim();
-
+      const cleanedText = generatedText.replace(/[*#]/g, "").trim(); // Basic cleanup
       receiveMessage({ text: cleanedText });
     })
     .catch((error) => {
       console.error("Error calling Gemini API:", error);
       const randomReply =
         prebuiltReplies[Math.floor(Math.random() * prebuiltReplies.length)];
-      receiveMessage({ text: randomReply });
+      receiveMessage({ text: `${randomReply} (Error: ${error.message})` }); // Show error to user
     })
     .finally(() => {
-      // Ensure indicator is hidden even after errors
-      hideApiProcessingIndicator();
+      hideApiProcessingIndicator(); // Always hide indicator here
     });
 }
 
@@ -594,38 +734,47 @@ function getGeminiResponse(userMessage) {
 
 // Initiate Spotify Authentication using Implicit Grant Flow
 function authenticateWithSpotify() {
-  if (!SPOTIFY_CLIENT_ID || SPOTIFY_CLIENT_ID === "YOUR_SPOTIFY_CLIENT_ID") {
+  if (
+    !SPOTIFY_CLIENT_ID ||
+    SPOTIFY_CLIENT_ID.includes("YOUR") ||
+    SPOTIFY_CLIENT_ID.length < 10
+  ) {
     receiveMessage({
-      text: "Spotify Client ID is not configured. Cannot connect to Spotify.",
+      text: "Spotify Client ID is not configured correctly. Cannot connect to Spotify.",
     });
-    console.error("Spotify Client ID is missing in scripts.js");
+    console.error("Spotify Client ID is missing or invalid in scripts.js");
+    hideApiProcessingIndicator(); // Hide indicator as we can't proceed
+    pendingSpotifyRequest = null; // Clear any pending request
     return;
   }
 
   // Scopes define the permissions your app requests
   const scopes = [
-    "user-read-private", // Read user profile
-    "user-read-email", // Read user email
-    "streaming", // Required for playback control (though not used with Embed)
-    // Add other scopes if needed, e.g., 'playlist-read-private'
+    "user-read-private",
+    "user-read-email",
+    // "streaming" // Not strictly needed for Embed, but doesn't hurt
   ].join(" ");
 
   // Correct Spotify Authorize URL
-  const authUrl = `https://api.spotify.com/v1/recommendations?limit=5&seed_tracks=$1?client_id=${SPOTIFY_CLIENT_ID}&redirect_uri=${encodeURIComponent(
+  const authUrl = `https://api.spotify.com/v1/recommendations?limit=5&seed_tracks=$8{SPOTIFY_CLIENT_ID}&redirect_uri=${encodeURIComponent(
     SPOTIFY_REDIRECT_URI
-  )}&scope=${encodeURIComponent(scopes)}&response_type=token&show_dialog=true`; // show_dialog forces login prompt
+  )}&scope=${encodeURIComponent(scopes)}&response_type=token&show_dialog=true`;
 
-  // Inform the user
-  receiveMessage({
-    text: "I need to connect to Spotify first. Please log in via the popup window.",
-  });
+  // Inform the user ONLY if not already showing the message
+  const messages = chatContainer.querySelectorAll(".message.other");
+  const lastMessageText =
+    messages.length > 0 ? messages[messages.length - 1].textContent : "";
+  if (!lastMessageText.includes("connect to Spotify first")) {
+    receiveMessage({
+      text: "I need to connect to Spotify first. Please log in via the popup window.",
+    });
+  }
 
   // Open the Spotify login page in a popup window
-  // Note: Popups can be blocked by browsers. Consider a full redirect approach for production.
   const spotifyWindow = window.open(
     authUrl,
     "Spotify Login",
-    "width=500,height=600,menubar=no,location=no,resizable=yes,scrollbars=yes,status=no" // Basic popup features
+    "width=500,height=650,menubar=no,location=no,resizable=yes,scrollbars=yes,status=no"
   );
 
   // Check if the popup was blocked
@@ -635,132 +784,116 @@ function authenticateWithSpotify() {
       spotifyWindow.closed ||
       typeof spotifyWindow.closed === "undefined"
     ) {
-      receiveMessage({
-        text: "It seems the Spotify login popup was blocked by your browser. Please allow popups for this site and try the command again.",
-      });
+      // Avoid duplicate messages if already shown
+      if (!lastMessageText.includes("popup was blocked")) {
+        receiveMessage({
+          text: "It seems the Spotify login popup was blocked by your browser. Please allow popups for this site and try the command again.",
+        });
+      }
+      hideApiProcessingIndicator(); // Hide indicator as auth failed
+      pendingSpotifyRequest = null; // Clear pending request
     }
-  }, 1000); // Check after 1 second
-
-  // The actual token retrieval happens in the `handleSpotifyCallback` function
-  // which is called when the page loads (checking the URL hash).
+  }, 1500); // Check after 1.5 seconds
 }
 
-// Handle the Spotify redirect callback (Implicit Grant)
-function handleSpotifyCallback() {
-  // Check if the current URL hash contains Spotify auth info
-  if (window.location.hash) {
-    const hashParams = window.location.hash
-      .substring(1) // Remove the '#'
-      .split("&")
-      .reduce((acc, item) => {
-        if (item) {
-          const parts = item.split("=");
-          acc[parts[0]] = decodeURIComponent(parts[1]);
-        }
-        return acc;
-      }, {});
+// --- Handle Callback and Local Storage ---
 
-    if (hashParams.access_token) {
-      console.log("Spotify access token received.");
-      spotifyAccessToken = hashParams.access_token;
+// Listen for messages from the Spotify auth callback popup
+window.addEventListener(
+  "message",
+  function (event) {
+    // Security check: Ensure the message comes from the expected origin (your own)
+    if (event.origin !== window.location.origin) {
+      console.warn(
+        "Ignored message from unexpected origin:",
+        event.origin,
+        "Expected:",
+        window.location.origin
+      );
+      return;
+    }
 
-      // Optionally store the token expiration time if provided (expires_in is in seconds)
-      // const expiresIn = hashParams.expires_in;
+    if (event.data && event.data.type === "spotify-auth-success") {
+      console.log("Received Spotify token via postMessage from callback.");
+      spotifyAccessToken = event.data.token;
+      // Optionally handle token expiration if 'expires_in' is sent
+      // const expiresIn = event.data.expires_in;
       // if (expiresIn) {
       //     const expiryTime = new Date().getTime() + expiresIn * 1000;
       //     localStorage.setItem('spotify_token_expiry', expiryTime);
       // }
 
-      // Clear the hash from the URL to avoid re-processing
-      window.location.hash = "";
+      receiveMessage({
+        text: "Successfully connected to Spotify!",
+      });
 
-      // Inform the user (if this wasn't triggered by a popup closing)
-      // Check if the window was opened by the app itself (simple check)
-      if (!window.opener) {
-        receiveMessage({
-          text: "Successfully connected to Spotify! You can now ask for songs and recommendations.",
-        });
+      // *** Execute the pending request if one exists ***
+      if (typeof pendingSpotifyRequest === "function") {
+        console.log("Executing pending Spotify request...");
+        pendingSpotifyRequest();
+        pendingSpotifyRequest = null; // Clear the pending request
       } else {
-        // If it's a popup, attempt to notify the opener window (less reliable)
-        // This part is tricky with cross-origin policies if domains differ.
-        // For same-origin (like file:// or localhost), it might work.
-        try {
-          if (window.opener && !window.opener.closed) {
-            window.opener.postMessage(
-              { type: "spotify-auth-success", token: spotifyAccessToken },
-              window.location.origin
-            );
-            // Close the popup automatically after success
-            window.close();
-          }
-        } catch (e) {
-          console.warn("Could not post message to opener window:", e);
-          // Provide instructions if popup doesn't close automatically
-          receiveMessage({
-            text: "Spotify connection successful! You can close this window/tab and return to the chat.",
-          });
-        }
+        hideApiProcessingIndicator(); // Hide indicator if no pending request
       }
-    } else if (hashParams.error) {
-      console.error("Spotify authentication error:", hashParams.error);
+    } else if (event.data && event.data.type === "spotify-auth-error") {
+      console.error(
+        "Received Spotify auth error via postMessage:",
+        event.data.error
+      );
       receiveMessage({
-        text: `Spotify connection failed: ${hashParams.error}. Please try again.`,
+        text: `Spotify connection failed: ${event.data.error}. Please try again.`,
       });
-      window.location.hash = ""; // Clear error hash
-    }
-  }
-}
-
-// Listen for messages from the Spotify auth popup (alternative to hash checking if using postMessage)
-window.addEventListener(
-  "message",
-  function (event) {
-    // Basic security check: ensure the message comes from the expected origin (your own)
-    if (event.origin !== window.location.origin) {
-      // console.warn("Ignored message from unexpected origin:", event.origin);
-      return;
-    }
-
-    if (event.data && event.data.type === "spotify-auth-success") {
-      console.log("Received Spotify token via postMessage from popup.");
-      spotifyAccessToken = event.data.token;
-      receiveMessage({
-        text: "Successfully reconnected to Spotify!",
-      });
-      // Optionally close the popup if it's still open (though it should close itself)
-      // event.source.close();
+      pendingSpotifyRequest = null; // Clear pending request on error
+      hideApiProcessingIndicator(); // Hide indicator on error
     }
   },
   false
 );
 
-// --- Local Storage ---
-
 // Save message to local storage, associated with the current user
 function saveMessage(message) {
   if (!currentUser) return; // Don't save if no user is logged in
   const userMessagesKey = `chatMessages_${currentUser}`;
-  const messages = JSON.parse(localStorage.getItem(userMessagesKey)) || [];
-  messages.push(message);
-  // Limit stored messages to avoid excessive storage use (e.g., last 50)
-  if (messages.length > 50) {
-    messages.shift();
+  try {
+    const messages = JSON.parse(localStorage.getItem(userMessagesKey)) || [];
+    messages.push(message);
+    // Limit stored messages to avoid excessive storage use (e.g., last 50)
+    if (messages.length > 50) {
+      messages.shift();
+    }
+    localStorage.setItem(userMessagesKey, JSON.stringify(messages));
+  } catch (e) {
+    console.error("Error saving message to localStorage:", e);
+    // Maybe clear localStorage if it's corrupted?
+    // localStorage.removeItem(userMessagesKey);
   }
-  localStorage.setItem(userMessagesKey, JSON.stringify(messages));
 }
 
 // Load messages from local storage for the current user
 function loadMessages() {
   if (!currentUser) return;
   const userMessagesKey = `chatMessages_${currentUser}`;
-  const messages = JSON.parse(localStorage.getItem(userMessagesKey)) || [];
-  chatContainer.innerHTML = ""; // Clear existing messages before loading
-  messages.forEach((message) => {
-    appendMessageToChat(message); // Use append function to create elements
-  });
-  // Add back the indicators after loading messages
-  chatContainer.appendChild(typingIndicator);
+  let messages = [];
+  try {
+    messages = JSON.parse(localStorage.getItem(userMessagesKey)) || [];
+  } catch (e) {
+    console.error("Error parsing messages from localStorage:", e);
+    localStorage.removeItem(userMessagesKey); // Clear corrupted data
+  }
+
+  // Clear existing messages and indicators before loading
+  chatContainer.innerHTML = "";
+  chatContainer.appendChild(typingIndicator); // Re-add indicators
   chatContainer.appendChild(apiProcessingIndicator);
+
+  messages.forEach((message) => {
+    // Ensure message format is somewhat valid before appending
+    if (message && message.user && message.text && message.timestamp) {
+      appendMessageToChat(message); // Use append function to create elements
+    } else {
+      console.warn("Skipping invalid message from localStorage:", message);
+    }
+  });
 
   // Scroll to the bottom after loading messages
   chatContainer.scrollTop = chatContainer.scrollHeight;
@@ -768,15 +901,15 @@ function loadMessages() {
 
 // --- Initialization ---
 
-// Check for Spotify callback when the page loads
-window.addEventListener("load", handleSpotifyCallback);
+// No need for handleSpotifyCallback here anymore, the callback.html handles it.
 
-// Optional: Check for stored access token on load (less common with Implicit Grant)
-// window.addEventListener("load", () => {
-//     const storedToken = localStorage.getItem('spotify_access_token');
-//     const expiryTime = localStorage.getItem('spotify_token_expiry');
-//     if (storedToken && expiryTime && new Date().getTime() < expiryTime) {
-//         console.log("Using stored Spotify token.");
-//         spotifyAccessToken = storedToken;
+// Optional: Load liked songs from localStorage on login?
+// function loadLikedSongs() {
+//     if (!currentUser) return;
+//     const likedSongs = localStorage.getItem(`spotifyLikedSongs_${currentUser}`);
+//     if (likedSongs) {
+//         userLikedSongs = JSON.parse(likedSongs);
+//         console.log("Loaded liked songs from localStorage:", userLikedSongs);
 //     }
-// });
+// }
+// // Call loadLikedSongs() within login() function.

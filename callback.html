@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Spotify Callback</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        background-color: #f0f2f5;
+        padding: 20px;
+        text-align: center;
+      }
+      .container {
+        background-color: #fff;
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        display: inline-block;
+      }
+      .message {
+        font-size: 1.1em;
+        color: #333;
+      }
+      .success {
+        color: #1db954;
+      }
+      .error {
+        color: #dc3545;
+      }
+      .loader {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #1db954;
+        border-radius: 50%;
+        width: 30px;
+        height: 30px;
+        animation: spin 1s linear infinite;
+        margin: 20px auto;
+      }
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div id="message" class="message">Processing authentication...</div>
+      <div id="loader" class="loader"></div>
+    </div>
+
+    <script>
+      // Function to parse hash parameters from URL
+      function getHashParams() {
+        const hashParams = {};
+        const r = /([^&;=]+)=?([^&;]*)/g;
+        const q = window.location.hash.substring(1);
+        let e;
+        while ((e = r.exec(q))) {
+          hashParams[e[1]] = decodeURIComponent(e[2]);
+        }
+        return hashParams;
+      }
+
+      // Run this code once the window loads
+      window.onload = function () {
+        const params = getHashParams();
+        const messageElement = document.getElementById("message");
+        const loaderElement = document.getElementById("loader");
+        loaderElement.style.display = "none"; // Hide loader once processed
+
+        if (params.access_token) {
+          console.log("Callback: Token received:", params.access_token);
+          // Send the token to the main window that opened this popup
+          if (window.opener) {
+            // IMPORTANT: Use the origin of your main application window for security
+            // If your main app is at https://spotify-music-finder-two.vercel.app/
+            const targetOrigin = "https://spotify-music-finder-two.vercel.app";
+            window.opener.postMessage(
+              {
+                type: "spotify-auth-success",
+                token: params.access_token,
+                expires_in: params.expires_in, // Pass expiry too if needed
+              },
+              targetOrigin
+            );
+
+            messageElement.textContent =
+              "Authentication successful! Closing window...";
+            messageElement.className = "message success"; // Style as success
+            // Close the popup window automatically after a short delay
+            setTimeout(() => window.close(), 1500);
+          } else {
+            messageElement.textContent =
+              "Authentication successful but couldn't find the main window. Please close this tab and return to the chat.";
+            messageElement.className = "message success";
+          }
+        } else if (params.error) {
+          console.error("Callback: Spotify Error:", params.error);
+          messageElement.textContent = `Authentication failed: ${params.error}. Please try again.`;
+          messageElement.className = "message error"; // Style as error
+          // Optionally close on error too, or leave open for user to see
+          // setTimeout(() => window.close(), 3000);
+        } else {
+          messageElement.textContent =
+            "Invalid callback state. No token or error found.";
+          messageElement.className = "message error";
+        }
+
+        // Clear the hash from the URL bar for cleanliness
+        // Use history.replaceState to avoid adding to history
+        if (window.history.replaceState) {
+          window.history.replaceState(
+            {},
+            document.title,
+            window.location.pathname + window.location.search
+          );
+        } else {
+          // Fallback for older browsers (might create a history entry)
+          window.location.hash = "";
+        }
+      };
+    </script>
+  </body>
+</html>
