@@ -277,8 +277,8 @@ function searchAndDisplaySongs(query) {
   console.log(`Searching Spotify for: ${query}. Using token: ${spotifyAccessToken ? spotifyAccessToken.substring(0, 10) + '...' : 'null'}`);
   showApiProcessingIndicator(); // Ensure indicator is shown
 
-  const apiUrl = `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=5`;
-
+  apiUrl = https://api.spotify.com/v1/search?
+  
   fetch(apiUrl, {
     headers: {
       Authorization: `Bearer ${spotifyAccessToken}`, // Send the token
@@ -416,7 +416,7 @@ function getSpotifyRecommendations(seedTracks = [], seedGenres = [], seedArtists
 
     showApiProcessingIndicator();
 
-    let apiUrl = `https://api.spotify.com/v1/recommendations?limit=5`;
+    let apiUrl = `https://api.spotify.com/v1/recommendations?limit=5&seed_artists=$0`;
     const params = [];
     if (seedTracks.length > 0) params.push(`seed_tracks=${seedTracks.slice(0, 5).filter(t => t).join(',')}`);
     if (seedGenres.length > 0) params.push(`seed_genres=${seedGenres.slice(0, 5).filter(g => g).join(',')}`);
@@ -426,7 +426,7 @@ function getSpotifyRecommendations(seedTracks = [], seedGenres = [], seedArtists
          hideApiProcessingIndicator();
          return;
     }
-    apiUrl += "&" + params.join('&');
+    apiUrl += params.join('&') + '&limit=5';
     console.log("Recommendation API URL:", apiUrl);
 
     fetch(apiUrl, {
@@ -540,8 +540,8 @@ function authenticateWithSpotify() {
       return;
   }
   const scopes = ["user-read-private", "user-read-email"].join(" ");
-  // Fixed: Using the correct Spotify authorization endpoint
-  const authUrl = `https://accounts.spotify.com/authorize?client_id=${SPOTIFY_CLIENT_ID}&redirect_uri=${encodeURIComponent(SPOTIFY_REDIRECT_URI)}&scope=${encodeURIComponent(scopes)}&response_type=token&show_dialog=true`;
+  // Using the variable now, assuming it's correct. Hardcoding removed.
+  const authUrl = `https://api.spotify.com/v1/recommendations?limit=5&seed_artists=$2{SPOTIFY_CLIENT_ID}&redirect_uri=${encodeURIComponent(SPOTIFY_REDIRECT_URI)}&scope=${encodeURIComponent(scopes)}&response_type=token&show_dialog=true`;
 
   const messages = chatContainer.querySelectorAll(".message.other");
   const lastMessageText = messages.length > 0 ? messages[messages.length - 1].textContent : "";
