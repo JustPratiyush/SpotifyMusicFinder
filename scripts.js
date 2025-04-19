@@ -28,8 +28,7 @@ const GEMINI_MODEL = "gemini-2.0-flash"; // Or your preferred model
 const SPOTIFY_CLIENT_ID = "7d96f4a1753c4d679344bdd7e90bdd89"; // <--- REPLACE THIS
 // IMPORTANT: This Redirect URI MUST EXACTLY match the one registered
 // in your Spotify Developer Dashboard for this application.
-const SPOTIFY_REDIRECT_URI = window.location.origin + window.location.pathname; // Or your specific callback URL
-
+const SPOTIFY_REDIRECT_URI = "https://spotify-music-finder-two.vercel.app/"; // Use your Vercel URL
 // Fallback responses if Gemini API fails
 const prebuiltReplies = [
   "Sorry, I couldn't connect right now. Maybe ask for a specific song?",
