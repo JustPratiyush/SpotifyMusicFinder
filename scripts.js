@@ -20,11 +20,11 @@ let userLikedSongs = []; // Stores IDs of tracks the user interacts with positiv
 
 // Gemini API Key (Replace with your actual key)
 // WARNING: Exposing API keys client-side is a security risk in production.
-const GEMINI_API_KEY = "AIzaSyCVFniEjNZt74EGIrUfehhmtplfuiOYLGk"; // <--- REPLACE THIS IF NEEDED
+const GEMINI_API_KEY = ""; // <--- REPLACE THIS IF NEEDED
 const GEMINI_MODEL = "gemini-2.0-flash"; // Or your preferred model
 
 // Spotify API Credentials (Replace with your actual Client ID)
-const SPOTIFY_CLIENT_ID = "7d96f4a1753c4d679344bdd7e90bdd89"; // <--- REPLACE THIS IF NEEDED
+const SPOTIFY_CLIENT_ID = ""; // <--- REPLACE THIS IF NEEDED
 
 // ***** IMPORTANT: Redirect URI points to your callback.html *****
 const SPOTIFY_REDIRECT_URI =
